@@ -1,0 +1,98 @@
+#!/bin/bash
+
+# XXX a note on robust-ness
+# in order to avoid complexity that would be introduced by trying to daemonize
+# bitwarden_rs in order to check the livelihood of the server processes,
+# the aforementioned livelihood check should be managed by an external service, which
+# cloud platform providers typically offer.
+
+# Start cron so that certbot gets run
+env MAILTO= cron
+_cron_status=$?
+if [ "x$_cron_status" != "x0" ]; then
+   echo "Could not start cron: $_cron_status"
+   exit $?
+fi
+
+# Perform initial certificate acquisition to prevent a chicken/egg situation with nginx
+mkdir -p -- "/data/logs/letsencrypt"
+mkdir -p -- "/data/letsencrypt/live"
+mkdir -p -- "/srv/certbot"
+
+if [ ! -f "/data/letsencrypt/renewal/$DOMAIN.conf" ]; then
+   echo "Performing initial certificate acquisition"
+   certbot --version
+
+   echo "Preexisting Certificates (managed by certbot): "
+   certbot --config-dir "/data/letsencrypt" certificates -n
+
+   # Initial run will use a standalone server
+   # To get around this generating a renewal config that uses standalone, 
+   # the webroot path is still given - "-w /srv/certbot -d ..."
+   # so that all that needs to happen is a find-and-replace in the renewal file
+   certbot --config-dir "/data/letsencrypt" --logs-dir "/data/logs/letsencrypt" certonly -n \
+      ${ACME_TRUSTWORTHY:+--no-verify-ssl} \
+      ${ACME_SERVER:+--server "$ACME_SERVER"} \
+      ${ACME_DRY:+--dry-run} \
+      ${ACME_STAGE:+--staging} \
+      --standalone --agree-tos ${ACME_EMAIL:+-m "$ACME_EMAIL"} \
+      -w /srv/certbot -d "$DOMAIN"
+
+   _acme_status=$?
+   if [ "x$_acme_status" != "x0" ]; then
+      echo "Could not issue a certificate for $DOMAIN: $_acme_status"
+      cat -- "/data/logs/letsencrypt/letsencrypt.log"
+      exit $_acme_status
+   fi
+
+   _renew_ini="/data/letsencrypt/renewal/$DOMAIN.conf"
+   if [ ! -f "$_renew_ini" ]; then
+      echo "Did not find a renewal configuration at '$_renew_ini'"
+      exit 2
+   fi
+
+   # Certbot will write a renewal config, change it to use webroot
+   sed -i "s/authenticator = standalone/authenticator = webroot/" "/data/letsencrypt/renewal/$DOMAIN.conf"
+   _auth_chg_stat=$?
+   if [ "x$_auth_chg_stat" != "x0" ]; then
+      echo "Could not change renewal method: $_auth_chg_stat"
+      exit $_auth_chg_stat
+   fi
+
+   cat -- "$_renew_ini"
+fi
+
+# Set up nginx configs
+NGINX_PIDFILE="/var/run/nginx.pid"
+export NGINX_PIDFILE
+
+declare -a _nginx_templates=("/etc/nginx/bitwarden_rs.conf.in")
+
+for template in "${_nginx_templates[@]}"; do
+   outfile="$(dirname "$template")/$(basename -s .in "$template")"
+   envsubst '${DOMAIN}' < "$template" > "$outfile"
+   _res=$?
+
+   if [ "x$_res" != "x0" ]; then
+      echo "Failed to process nginx config template $template: $_res"
+      exit $_res;
+   fi
+done
+
+# Start nginx - it should daemonize
+mkdir -p -- "/data/logs/nginx"
+
+nginx -c "/etc/nginx/bitwarden_rs.conf"
+_nginx_status=$?
+
+if [ "x$_nginx_status" != "x0" ]; then
+   echo "Failed to start nginx: $_nginx_status"
+   exit $_nginx_status
+fi
+
+# Start bwrs
+ROCKET_ENV=production
+ROCKET_PORT=8080
+ROCKET_ADDRESS=127.0.0.1
+export ROCKET_ENV ROCKET_PORT ROCKET_ADDRESS
+/bitwarden_rs
