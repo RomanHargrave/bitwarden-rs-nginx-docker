@@ -7,8 +7,8 @@ RUN mkdir -p -- /etc/apt/sources.list.d && echo "deb http://ftp.debian.org/debia
 # NginX for Debian should include the nginx_http_headers module
 # gettext-base provides envsubst which is used to generate the nginx config at runtime
 RUN apt update \
-   && apt install -t stretch-backports --no-install-recommends --no-install-suggests -y certbot \
-   && apt install --no-install-recommends --no-install-suggests -y nginx cron gettext-base sed \
+   && apt install -t stretch-backports --no-install-recommends --no-install-suggests -y certbot sqlite3 \
+   && apt install --no-install-recommends --no-install-suggests -y nginx cron gettext-base sed findutils \
    && apt clean
 
 COPY ./fs/etc/nginx/bitwarden_rs.conf.in /etc/nginx/bitwarden_rs.conf.in
@@ -18,6 +18,10 @@ COPY ./fs/sbin/start-bitwarden-nginx /sbin/start-bitwarden-nginx
 COPY ./fs/etc/logrotate.conf           /etc/logrotate.conf
 COPY ./fs/etc/logrotate.d/certbot.conf /etc/logrotate.d/certbot.conf
 COPY ./fs/etc/logrotate.d/nginx.conf   /etc/logrotate.d/nginx.conf
+
+COPY ./fs/etc/cron.weekly/bwrs-db-backup /etc/cron.weekly/bwrs-db-backup
+
+COPY ./fs/sbin/reload-nginx-data /sbin/reload-nginx-data
 
 ENV ACME_EMAIL=nobody@example.org
 ENV DOMAIN=localhost.local

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Backs up sqlite3 database in $DATA_FOLDER
+mkdir -p -- "$DATA_FOLDER/backups"
+if [ -f "$DATA_FOLDER/db.sqlite3" ]; then
+   _date_stamp=$(date +'%Y%m%d')
+   _out_file="$DATA_FOLDER/backups/db.$_date_stamp.sqlite3"
+   sqlite3 "$DATA_FOLDER/db.sqlite3" ".backup $_out_file"
+
+   gzip $_out_file
+fi
+
+# Clean up older backups
+find "$DATA_FOLDER/backups" -type f -name '*.sqlite3.gz' -ctime 49 -delete

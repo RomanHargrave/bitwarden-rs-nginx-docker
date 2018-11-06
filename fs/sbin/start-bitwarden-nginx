@@ -1,18 +1,23 @@
 #!/bin/bash
-
 # XXX a note on robust-ness
 # in order to avoid complexity that would be introduced by trying to daemonize
 # bitwarden_rs in order to check the livelihood of the server processes,
 # the aforementioned livelihood check should be managed by an external service, which
 # cloud platform providers typically offer.
 
-# Start cron so that certbot gets run
-env MAILTO= cron
-_cron_status=$?
-if [ "x$_cron_status" != "x0" ]; then
-   echo "Could not start cron: $_cron_status"
-   exit $?
-fi
+# Migrate preexisting bitwarden_rs data in to /data/bitwarden
+export DATA_FOLDER="/data/bitwarden"
+mkdir -p -- "$DATA_FOLDER"
+
+migrate_data () {
+   test -e "/data/$1" && mv -v -- "/data/$1" "$DATA_FOLDER/$1"
+}
+
+bw_data_files=( "db.sqlite3" "rsa_key.der" "rsa_key.pem" "rsa_key.pub.der" "attachments" "icon_cache" )
+
+for name in ${bw_data_files[@]}; do
+   migrate_data $name
+done
 
 # Perform initial certificate acquisition to prevent a chicken/egg situation with nginx
 mkdir -p -- "/data/logs/letsencrypt"
@@ -22,6 +27,11 @@ mkdir -p -- "/srv/certbot"
 if [ ! -f "/data/letsencrypt/renewal/$DOMAIN.conf" ]; then
    echo "Performing initial certificate acquisition"
    certbot --version
+
+   if [ "x${ACME_EMAIL:-N}" = "xN" ]; then
+      echo "ACME_EMAIL is not set, but it is mandatory for initial certificate issuance"
+      exit 2
+   fi
 
    echo "Preexisting Certificates (managed by certbot): "
    certbot --config-dir "/data/letsencrypt" certificates -n
@@ -35,7 +45,7 @@ if [ ! -f "/data/letsencrypt/renewal/$DOMAIN.conf" ]; then
       ${ACME_SERVER:+--server "$ACME_SERVER"} \
       ${ACME_DRY:+--dry-run} \
       ${ACME_STAGE:+--staging} \
-      --standalone --agree-tos ${ACME_EMAIL:+-m "$ACME_EMAIL"} \
+      --standalone --agree-tos -m "$ACME_EMAIL" \
       -w /srv/certbot -d "$DOMAIN"
 
    _acme_status=$?
@@ -62,15 +72,23 @@ if [ ! -f "/data/letsencrypt/renewal/$DOMAIN.conf" ]; then
    cat -- "$_renew_ini"
 fi
 
+export NGINX_PIDFILE="/var/run/nginx.pid"
+
+# Start cron so that certbot gets run
+env MAILTO= cron
+_cron_status=$?
+if [ "x$_cron_status" != "x0" ]; then
+   echo "Could not start cron: $_cron_status"
+   exit $?
+fi
+
 # Set up nginx configs
-NGINX_PIDFILE="/var/run/nginx.pid"
-export NGINX_PIDFILE
 
 declare -a _nginx_templates=("/etc/nginx/bitwarden_rs.conf.in")
 
 for template in "${_nginx_templates[@]}"; do
    outfile="$(dirname "$template")/$(basename -s .in "$template")"
-   envsubst '${DOMAIN}' < "$template" > "$outfile"
+   envsubst '${DOMAIN} ${NGINX_PIDFILE}' < "$template" > "$outfile"
    _res=$?
 
    if [ "x$_res" != "x0" ]; then
