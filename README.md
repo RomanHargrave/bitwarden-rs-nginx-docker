@@ -1,7 +1,7 @@
 What is this?
 =============
 
-This is a collection of scripts and configuration that work together
+This is a collection of scripts and configurations that work together
 to automate deployment of [bitwarden\_rs](https://github.com/dani-garcia/bitwarden\_rs)
 in a singular docker container.
 
@@ -67,7 +67,7 @@ NginX has been configured in such a manner that it scores A+ on SSLLabs certific
 ### Logging and Log Rotation
 
 Logrotate is installed and configured to look for certbot and NginX logs in their subdirectories beneath `/data`. NginX log files
-are rotated on a weekly basis with three weeks of history retained. Certbot logs are rotated on a monthly basis with twelve monnths
+are rotated on a weekly basis with three weeks of history retained. Certbot logs are rotated on a monthly basis with twelve months
 of history retained.
 
 bitwarden\_rs output is not logged; however, it (as of writing) has no meaningful output and is more or less silent when `ROCKET_ENV` is
@@ -79,7 +79,7 @@ Notes
 Practically speaking, there should be no friction resulting from changes to `$DOMAIN`; hoever, the certbot renewal INIs for any historic
 value of `$DOMAIN` will persist, resulting in renewal errors.
 
-On the subject of multiple current of historic values for domains, the current design does not accomodate multiple values for `$DOMAIN`.
+On the matter of previously used domains, the current design does not accomodate multiple values for `$DOMAIN`.
 `-d $DOMAIN` is passed directly to certbot, and the manner in which bitwarden\_rs interprets the value for `$DOMAIN` may limit the
 ability to pass multiple values in some fashion via the variable.
 
