@@ -1,4 +1,5 @@
-FROM bitwarden-rs:git
+# FROM bitwarden-rs:git
+FROM mprasil/bitwarden:latest
 
 # Before installing certbot, add backports to get 0.22 instead of 0.10
 RUN mkdir -p -- /etc/apt/sources.list.d && echo "deb http://ftp.debian.org/debian stretch-backports main" >> /etc/apt/sources.list.d/stretch-backports.list
