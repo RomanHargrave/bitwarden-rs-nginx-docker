@@ -4,6 +4,6 @@
    nomail
    missingok
    postrotate
-      kill -USR1 $(cate /var/run/nginx.pid)
+      kill -USR1 $(cat $NGINX_PIDFILE)
    endscript
 }
