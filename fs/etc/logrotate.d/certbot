@@ -1,4 +1,4 @@
-/data/logs/letsencrypt/* {
+/data/logs/letsencrypt/*.log {
    monthly
    rotate 12
    nomail
